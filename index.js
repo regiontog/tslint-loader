@@ -58,7 +58,6 @@ function lint(webpackInstance, input, options) {
     formattersDirectory: options.formattersDirectory,
     rulesDirectory: ''
   };
-  var bailEnabled = (webpackInstance.options && webpackInstance.options.bail === true);
 
   var program;
   if (options.typeCheck) {
@@ -69,29 +68,28 @@ function lint(webpackInstance, input, options) {
   var linter = new Lint.Linter(lintOptions, program);
   linter.lint(webpackInstance.resourcePath, input, options.configuration);
   var result = linter.getResult();
-  var emitter = options.emitErrors ? webpackInstance.emitError : webpackInstance.emitWarning;
 
-  report(result, emitter, options.failOnHint, options.fileOutput, webpackInstance.resourcePath,  bailEnabled);
+  report(result, webpackInstance.emitError, webpackInstance.emitWarning, options.fileOutput);
 }
 
-function report(result, emitter, failOnHint, fileOutputOpts, filename, bailEnabled) {
-  if (result.failureCount === 0) return;
-  if (result.failures && result.failures.length === 0) return;
-  var err = new Error(result.output);
-  delete err.stack;
-  emitter(err);
-
+function report(result, err, warn, fileOutputOpts) {
   if (fileOutputOpts && fileOutputOpts.dir) {
     writeToFile(fileOutputOpts, result);
   }
 
-  if (failOnHint) {
-    var messages = '';
-    if (bailEnabled){
-      messages = '\n\n' + filename + '\n' + result.output;
+  result.failures.map(failure => {
+    if (failure.ruleSeverity === "error" || failure.ruleSeverity === "warning") {
+      const output = new Error('['
+                   .concat(failure.startPosition.lineAndCharacter.line)
+                   .concat(', ')
+                   .concat(failure.startPosition.lineAndCharacter.character)
+                   .concat(']: ')
+                   .concat(failure.failure)
+                   .concat('\n'));
+
+      (failure.ruleSeverity === "error" ? err : warn)(output);
     }
-    throw new Error('Compilation failed due to tslint errors.' +  messages);
-  }
+  });
 }
 
 var cleaned = false;
@@ -140,4 +138,3 @@ module.exports = function(input, map) {
   lint(this, input, options);
   callback(null, input, map);
 };
-
